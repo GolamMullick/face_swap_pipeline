@@ -81,29 +81,6 @@ always look at any step on its own.
 
 ---
 
-## What's in the folder
-
-```
-web/index.html        the web page
-api/main.py           the small server behind it
-pipeline/             the four steps (one file each, in pipeline/stages/)
-pipeline/models/      the face-detection model file
-streamlit_app.py      an alternative, even simpler UI (see below)
-Dockerfile            for running with Docker
-```
-
----
-
-## Alternative UI (Streamlit)
-
-Same tool, different interface — some people find it easier:
-
-```bash
-python -m venv .venv-streamlit
-source .venv-streamlit/bin/activate    # Windows: .venv-streamlit\Scripts\activate
-pip install -r requirements-streamlit.txt
-streamlit run streamlit_app.py
-```
 
 ---
 
@@ -139,9 +116,3 @@ image on, so steps are easy to add, remove, or replace.
 
 ---
 
-## Credits & license
-
-- Face detection model: [YuNet](https://github.com/ShiqiYu/libfacedetection.train)
-  by Shiqi Yu (BSD 3-Clause), included in `pipeline/models/`.
-- Built with OpenCV, FastAPI, and Streamlit.
-- License: MIT — see [LICENSE](LICENSE).
