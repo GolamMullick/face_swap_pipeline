@@ -17,26 +17,28 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Clone if repo doesn't exist yet on server, otherwise pull
-            if [ ! -d "face_swap_pipeline" ]; then
+            # 1. Check if a valid git repo exists. If not, wipe the folder and clone fresh.
+            if [ ! -d "face_swap_pipeline/.git" ]; then
+              echo "Git repository not found. Cleaning up and cloning fresh..."
+              sudo rm -rf face_swap_pipeline
               git clone https://github.com/${{ github.repository }}.git face_swap_pipeline
             fi
             
             cd face_swap_pipeline
             
-            # Discard any local changes and pull the latest from main
-            git reset --hard
-            git pull origin main
+            # 2. Force the local folder to match the GitHub main branch exactly
+            git fetch origin main
+            git reset --hard origin/main
             
-            # Clean up old Docker files to free up space
+            # 3. Clean up old Docker files to free up space
             sudo docker system prune -af
             
-            # Build Docker Image locally on the EC2 instance
+            # 4. Build Docker Image locally on the EC2 instance
             sudo docker build -t face-pipeline .
             
-            # Stop old container if running
+            # 5. Stop old container if running
             sudo docker stop face-pipeline-container || true
             sudo docker rm face-pipeline-container || true
             
-            # Run new container
+            # 6. Run new container
             sudo docker run -d --name face-pipeline-container -p 8000:8001 --restart unless-stopped face-pipeline
