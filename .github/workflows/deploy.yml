@@ -17,8 +17,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
-      # Fix: Convert the uppercase GitHub repository name to lowercase for GHCR
+
       - name: Convert repository name to lowercase
         id: repo_name
         run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
@@ -48,27 +47,27 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            mkdir -p ~/face_swap_pipeline
-            cd ~/face_swap_pipeline
-            
-            # Ensure we use the lowercase name on the server as well
+            # Set variables
             IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            FULL_IMAGE="ghcr.io/${IMAGE_NAME}:latest"
+            CONTAINER_NAME="face_swap_app"
             
             # Login to GitHub Container Registry
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            # Fetch the raw docker-compose.yml from your repository
-            curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 -H "Accept: application/vnd.github.v3.raw" \
-                 -L https://api.github.com/repos/${{ github.repository }}/contents/docker-compose.yml \
-                 -o docker-compose.yml
+            # Pull the latest image explicitly
+            docker pull $FULL_IMAGE
             
-            # Replace the local 'build: .' directive with the lowercase built image from GHCR
-            sed -i "s|build: .|image: ghcr.io/${IMAGE_NAME}:latest|g" docker-compose.yml
+            # Stop and remove the old container if it exists (ignore errors if it doesn't)
+            docker stop $CONTAINER_NAME || true
+            docker rm $CONTAINER_NAME || true
             
-            # Pull the latest image and restart the container
-            docker compose pull
-            docker compose up -d --remove-orphans
+            # Run the new container
+            docker run -d \
+              --name $CONTAINER_NAME \
+              --restart unless-stopped \
+              -p 8001:8001 \
+              $FULL_IMAGE
             
             # Clean up old unused images to save disk space
             docker image prune -f
