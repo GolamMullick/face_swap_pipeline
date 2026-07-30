@@ -1,73 +1,42 @@
-name: Deploy Face Swap Pipeline
+name: Deploy to EC2 with Docker
 
 on:
   push:
-    branches: [ "main" ]
-
-env:
-  REGISTRY: ghcr.io
+    branches:
+      - main
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Convert repository name to lowercase
-        id: repo_name
-        run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-
   deploy:
-    needs: build-and-push
     runs-on: ubuntu-latest
+
     steps:
-      - name: Deploy to EC2 via SSH
+      - name: SSH into EC2 and Deploy Docker Container
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Set variables
-            IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-            FULL_IMAGE="ghcr.io/${IMAGE_NAME}:latest"
-            CONTAINER_NAME="face_swap_app"
+            # Clone if repo doesn't exist yet on server, otherwise pull
+            if [ ! -d "face_swap_pipeline" ]; then
+              git clone https://github.com/${{ github.repository }}.git face_swap_pipeline
+            fi
             
-            # Login to GitHub Container Registry
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd face_swap_pipeline
             
-            # Pull the latest image explicitly
-            docker pull $FULL_IMAGE
+            # Discard any local changes and pull the latest from main
+            git reset --hard
+            git pull origin main
             
-            # Stop and remove the old container if it exists (ignore errors if it doesn't)
-            docker stop $CONTAINER_NAME || true
-            docker rm $CONTAINER_NAME || true
+            # Clean up old Docker files to free up space
+            sudo docker system prune -af
             
-            # Run the new container
-            docker run -d \
-              --name $CONTAINER_NAME \
-              --restart unless-stopped \
-              -p 8001:8001 \
-              $FULL_IMAGE
+            # Build Docker Image locally on the EC2 instance
+            sudo docker build -t face-pipeline .
             
-            # Clean up old unused images to save disk space
-            docker image prune -f
+            # Stop old container if running
+            sudo docker stop face-pipeline-container || true
+            sudo docker rm face-pipeline-container || true
+            
+            # Run new container
+            sudo docker run -d --name face-pipeline-container -p 8000:8001 --restart unless-stopped face-pipeline
