@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Face Pipeline Studio</title>
+<style>
+  :root {
+    --bg: #14171a;
+    --panel: #1b1f23;
+    --panel-raised: #21262b;
+    --border: #2b3137;
+    --text: #e9e6df;
+    --text-dim: #8b9198;
+    --key: #e8a33d;      /* warm tungsten key light */
+    --key-dim: #6b5027;
+    --rim: #4fd1e8;       /* cool rim light */
+    --rim-dim: #2a565e;
+    --danger: #e0654f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", "Inter", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--key);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  h1 span { color: var(--text-dim); font-weight: 400; }
+
+  .stepper {
+    display: flex;
+    gap: 0;
+    margin-top: 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px 6px 0;
+    color: var(--text-dim);
+  }
+  .step .num {
+    width: 18px; height: 18px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+  }
+  .step.active { color: var(--text); }
+  .step.active .num { border-color: var(--key); color: var(--key); }
+  .step.done .num { background: var(--key-dim); border-color: var(--key); color: var(--key); }
+  .step-sep { color: var(--border); padding: 0 4px; }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1px;
+    background: var(--border);
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .col { background: var(--bg); padding: 24px 32px; }
+
+  .dropzones { display: flex; gap: 16px; margin-bottom: 20px; }
+  .dropzone {
+    flex: 1;
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--panel);
+    position: relative;
+    min-height: 140px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--rim); background: var(--panel-raised); }
+  .dropzone .label { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .dropzone .hint { font-size: 11px; color: var(--text-dim); }
+  .dropzone img {
+    max-width: 100%; max-height: 100px; border-radius: 6px; margin-bottom: 8px;
+    object-fit: cover;
+  }
+  .dropzone input { display: none; }
+  .dropzone .clear-btn {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(0,0,0,0.5); border: none; color: var(--text);
+    width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 12px;
+    display: none;
+  }
+  .dropzone.filled .clear-btn { display: block; }
+
+  .run-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--key);
+    color: #1a1305;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.15s;
+    font-family: var(--sans);
+  }
+  .run-btn:hover { background: #f3b355; }
+  .run-btn:active { transform: scale(0.99); }
+  .run-btn:disabled { background: var(--border); color: var(--text-dim); cursor: not-allowed; }
+
+  .status-line {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  .status-line.error { color: var(--danger); }
+  .status-line.ok { color: var(--rim); }
+
+  /* Compare slider — signature element */
+  .compare-wrap {
+    margin-top: 24px;
+  }
+  .compare-title { font-size: 12px; font-weight: 600; margin-bottom: 10px; display:flex; justify-content: space-between; align-items:center; }
+  .compare-title .tag { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .compare {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    display: none;
+  }
+  .compare.ready { display: block; }
+  .compare img {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; object-fit: contain;
+    background: #0c0e10;
+    user-select: none; pointer-events: none;
+  }
+  .compare .after-clip {
+    position: absolute; top: 0; left: 0; height: 100%;
+    width: 50%; overflow: hidden;
+  }
+  .compare .after-clip img { width: var(--full-w, 100%); height: 100%; }
+  .compare .handle {
+    position: absolute; top: 0; bottom: 0; left: 50%;
+    width: 2px; background: var(--rim);
+    cursor: ew-resize;
+    transform: translateX(-1px);
+  }
+  .compare .handle::after {
+    content: "";
+    position: absolute; top: 50%; left: 50%;
+    width: 28px; height: 28px;
+    background: var(--rim);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .compare .handle::before {
+    content: "◂▸";
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -55%);
+    font-size: 9px; color: #08282c; z-index: 2; letter-spacing: 2px;
+  }
+  .compare .side-label {
+    position: absolute; top: 10px; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+    background: rgba(0,0,0,0.5); padding: 3px 7px; border-radius: 4px; pointer-events: none;
+  }
+  .compare .side-label.left { left: 10px; }
+  .compare .side-label.right { right: 10px; }
+
+  /* Pass gallery */
+  .gallery { margin-top: 22px; }
+  .gallery-title { font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .gallery-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .pass-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .pass-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #0c0e10; }
+  .pass-card .pname {
+    font-family: var(--mono); font-size: 10px; padding: 6px 8px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
+  /* Right panel — control console */
+  .panel { background: var(--panel); }
+  .section { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim); margin-bottom: 14px;
+  }
+
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+  .field-label .val { font-family: var(--mono); color: var(--key); }
+
+  input[type=range] {
+    width: 100%; -webkit-appearance: none; height: 4px; border-radius: 2px;
+    background: var(--border); outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--key); cursor: pointer; border: 2px solid var(--bg);
+  }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 12px; }
+  .toggle-row:last-child { margin-bottom: 0; }
+  .switch { position: relative; width: 34px; height: 18px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider-pill {
+    position: absolute; cursor: pointer; inset: 0; background: var(--border);
+    border-radius: 18px; transition: 0.15s;
+  }
+  .slider-pill::before {
+    content: ""; position: absolute; height: 14px; width: 14px; left: 2px; top: 2px;
+    background: var(--text-dim); border-radius: 50%; transition: 0.15s;
+  }
+  .switch input:checked + .slider-pill { background: var(--rim-dim); }
+  .switch input:checked + .slider-pill::before { transform: translateX(16px); background: var(--rim); }
+
+  /* Light angle dial — signature control */
+  .dial-wrap { display: flex; align-items: center; gap: 18px; }
+  .dial {
+    width: 90px; height: 90px; border-radius: 50%;
+    border: 1px solid var(--border);
+    background: radial-gradient(circle at center, var(--panel-raised) 60%, var(--panel) 100%);
+    position: relative; cursor: grab; flex-shrink: 0;
+  }
+  .dial .tick {
+    position: absolute; top: 50%; left: 50%; width: 3px; height: 3px;
+    background: var(--rim); border-radius: 50%;
+    transform-origin: 0 0;
+  }
+  .dial .needle {
+    position: absolute; top: 50%; left: 50%; width: 2px; height: 34px;
+    background: linear-gradient(to top, var(--key), transparent);
+    transform-origin: top center;
+  }
+  .dial .center-dot {
+    position: absolute; top: 50%; left: 50%; width: 8px; height: 8px;
+    background: var(--key); border-radius: 50%; transform: translate(-50%, -50%);
+  }
+  .dial-readout { font-family: var(--mono); font-size: 20px; color: var(--key); }
+  .dial-readout .unit { font-size: 11px; color: var(--text-dim); }
+
+  .log {
+    font-family: var(--mono); font-size: 10.5px; color: var(--text-dim);
+    background: #0e1113; border-radius: 6px; padding: 10px 12px;
+    max-height: 140px; overflow-y: auto; line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .log .warn { color: var(--danger); }
+
+  footer {
+    padding: 16px 32px; font-family: var(--mono); font-size: 10.5px; color: var(--text-dim);
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--rim); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">detect · replace · enhance · relight</div>
+  <h1>Face Pipeline <span>Studio</span></h1>
+  <div class="stepper" id="stepper">
+    <div class="step" data-step="detect_align"><span class="num">1</span> Detect &amp; align</div>
+    <span class="step-sep">›</span>
+    <div class="step" data-step="face_replace"><span class="num">2</span> Replace</div>
+    <span class="step-sep">›</span>
+    <div class="step" data-step="enhance"><span class="num">3</span> Enhance</div>
+    <span class="step-sep">›</span>
+    <div class="step" data-step="relight"><span class="num">4</span> Relight</div>
+  </div>
+</header>
+
+<main>
+  <div class="col">
+    <div class="dropzones">
+      <div class="dropzone" id="dz-target">
+        <button class="clear-btn" id="clear-target">×</button>
+        <div class="label">Target (plate)</div>
+        <div class="hint">Click or drop an image — the shot this face will live in</div>
+        <input type="file" id="input-target" accept="image/*" />
+      </div>
+      <div class="dropzone" id="dz-driver">
+        <button class="clear-btn" id="clear-driver">×</button>
+        <div class="label">Driver (optional)</div>
+        <div class="hint">A source face to place onto the target</div>
+        <input type="file" id="input-driver" accept="image/*" />
+      </div>
+    </div>
+
+    <button class="run-btn" id="run-btn">Run pipeline</button>
+    <div class="status-line" id="status"></div>
+
+    <div class="compare-wrap">
+      <div class="compare-title">
+        <span>Before / after</span>
+        <span class="tag" id="compare-tag"></span>
+      </div>
+      <div class="compare" id="compare">
+        <img id="compare-before" />
+        <div class="after-clip" id="after-clip"><img id="compare-after" /></div>
+        <div class="handle" id="handle"></div>
+        <div class="side-label left">Original</div>
+        <div class="side-label right">Result</div>
+      </div>
+    </div>
+
+    <div class="gallery" id="gallery" style="display:none">
+      <div class="gallery-title">All passes</div>
+      <div class="gallery-grid" id="gallery-grid"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section">
+      <div class="section-title">Face replace</div>
+      <div class="toggle-row">
+        <span>Color-match driver to target</span>
+        <label class="switch"><input type="checkbox" id="in-colormatch" checked /><span class="slider-pill"></span></label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Enhance</div>
+      <div class="field">
+        <div class="field-label">Strength <span class="val" id="val-strength">1.0</span></div>
+        <input type="range" id="in-strength" min="0.1" max="3" step="0.1" value="1.0" />
+      </div>
+      <div class="toggle-row">
+        <span>Denoise</span>
+        <label class="switch"><input type="checkbox" id="in-denoise" checked /><span class="slider-pill"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span>Sharpen</span>
+        <label class="switch"><input type="checkbox" id="in-sharpen" checked /><span class="slider-pill"></span></label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Relight</div>
+      <div class="toggle-row">
+        <span>Match plate lighting</span>
+        <label class="switch"><input type="checkbox" id="in-match" checked /><span class="slider-pill"></span></label>
+      </div>
+      <div class="field">
+        <div class="field-label">Light strength <span class="val" id="val-lightstrength">0.3</span></div>
+        <input type="range" id="in-lightstrength" min="0" max="1" step="0.05" value="0.3" />
+      </div>
+      <div class="field" style="margin-top: 18px;">
+        <div class="field-label">Light angle</div>
+        <div class="dial-wrap">
+          <div class="dial" id="dial">
+            <div class="needle" id="dial-needle"></div>
+            <div class="center-dot"></div>
+          </div>
+          <div class="dial-readout"><span id="val-angle">45</span><span class="unit">°</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Stage log</div>
+      <div class="log" id="log">Run the pipeline to see stage-by-stage notes here.</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  API: <span id="api-base"></span> · endpoints: <a href="/docs" target="_blank">/docs</a>
+</footer>
+
+<script>
+const API = window.location.origin;
+document.getElementById('api-base').textContent = API;
+
+let targetFile = null, driverFile = null;
+
+// ---- dropzone wiring ----
+function wireDropzone(zoneId, inputId, clearId, onSet) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  const clearBtn = document.getElementById(clearId);
+
+  zone.addEventListener('click', (e) => { if (e.target !== clearBtn) input.click(); });
+  input.addEventListener('change', () => { if (input.files[0]) setFile(input.files[0]); });
+
+  ['dragover','dragenter'].forEach(evt => zone.addEventListener(evt, e => { e.preventDefault(); zone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt => zone.addEventListener(evt, e => { e.preventDefault(); zone.classList.remove('drag'); }));
+  zone.addEventListener('drop', e => { if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+
+  clearBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    zone.classList.remove('filled');
+    zone.querySelector('img')?.remove();
+    input.value = '';
+    onSet(null);
+  });
+
+  function setFile(file) {
+    onSet(file);
+    zone.classList.add('filled');
+    zone.querySelector('img')?.remove();
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    zone.prepend(img);
+  }
+}
+
+wireDropzone('dz-target', 'input-target', 'clear-target', f => targetFile = f);
+wireDropzone('dz-driver', 'input-driver', 'clear-driver', f => driverFile = f);
+
+// ---- sliders ----
+const strengthEl = document.getElementById('in-strength');
+strengthEl.addEventListener('input', () => document.getElementById('val-strength').textContent = strengthEl.value);
+const lightStrengthEl = document.getElementById('in-lightstrength');
+lightStrengthEl.addEventListener('input', () => document.getElementById('val-lightstrength').textContent = lightStrengthEl.value);
+
+// ---- light angle dial ----
+let angle = 45;
+const dial = document.getElementById('dial');
+const needle = document.getElementById('dial-needle');
+function setAngle(deg) {
+  angle = ((deg % 360) + 360) % 360;
+  needle.style.transform = `rotate(${angle}deg)`;
+  document.getElementById('val-angle').textContent = Math.round(angle);
+}
+setAngle(45);
+let dragging = false;
+function angleFromEvent(e) {
+  const rect = dial.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - cx;
+  const y = (e.touches ? e.touches[0].clientY : e.clientY) - cy;
+  return (Math.atan2(x, -y) * 180 / Math.PI);
+}
+dial.addEventListener('mousedown', e => { dragging = true; setAngle(angleFromEvent(e)); });
+window.addEventListener('mousemove', e => { if (dragging) setAngle(angleFromEvent(e)); });
+window.addEventListener('mouseup', () => dragging = false);
+dial.addEventListener('touchstart', e => { dragging = true; setAngle(angleFromEvent(e)); });
+window.addEventListener('touchmove', e => { if (dragging) setAngle(angleFromEvent(e)); });
+window.addEventListener('touchend', () => dragging = false);
+
+// ---- compare slider ----
+const compare = document.getElementById('compare');
+const afterClip = document.getElementById('after-clip');
+const handle = document.getElementById('handle');
+let compareDragging = false;
+function setComparePct(pct) {
+  pct = Math.max(0, Math.min(100, pct));
+  afterClip.style.width = pct + '%';
+  handle.style.left = pct + '%';
+}
+handle.addEventListener('mousedown', () => compareDragging = true);
+window.addEventListener('mouseup', () => compareDragging = false);
+window.addEventListener('mousemove', e => {
+  if (!compareDragging) return;
+  const rect = compare.getBoundingClientRect();
+  setComparePct(((e.clientX - rect.left) / rect.width) * 100);
+});
+handle.addEventListener('touchstart', () => compareDragging = true);
+window.addEventListener('touchend', () => compareDragging = false);
+window.addEventListener('touchmove', e => {
+  if (!compareDragging) return;
+  const rect = compare.getBoundingClientRect();
+  setComparePct(((e.touches[0].clientX - rect.left) / rect.width) * 100);
+});
+
+// ---- stepper ----
+function markStep(name, state) {
+  const el = document.querySelector(`.step[data-step="${name}"]`);
+  if (!el) return;
+  el.classList.remove('active', 'done');
+  if (state) el.classList.add(state);
+}
+function resetSteps() {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'done'));
+}
+
+// ---- run pipeline ----
+const statusEl = document.getElementById('status');
+const runBtn = document.getElementById('run-btn');
+const logEl = document.getElementById('log');
+const galleryGrid = document.getElementById('gallery-grid');
+const gallery = document.getElementById('gallery');
+
+async function fetchPassBlobUrl(jobId, name) {
+  const resp = await fetch(`${API}/pipeline/${jobId}/passes/${name}`);
+  if (!resp.ok) throw new Error(`Could not fetch pass "${name}"`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
+runBtn.addEventListener('click', async () => {
+  if (!targetFile) {
+    statusEl.textContent = 'Add a target image first — that\'s the shot the face will live in.';
+    statusEl.className = 'status-line error';
+    return;
+  }
+
+  runBtn.disabled = true;
+  statusEl.textContent = 'Running…';
+  statusEl.className = 'status-line';
+  resetSteps();
+  gallery.style.display = 'none';
+  galleryGrid.innerHTML = '';
+
+  const params = {
+    face_replace: { color_match: document.getElementById('in-colormatch').checked },
+    enhance: {
+      strength: parseFloat(strengthEl.value),
+      denoise: document.getElementById('in-denoise').checked,
+      sharpen: document.getElementById('in-sharpen').checked,
+    },
+    relight: {
+      match_plate_lighting: document.getElementById('in-match').checked,
+      light_angle: angle,
+      light_strength: parseFloat(lightStrengthEl.value),
+    },
+  };
+
+  const fd = new FormData();
+  fd.append('target', targetFile);
+  if (driverFile) fd.append('driver', driverFile);
+  fd.append('params', JSON.stringify(params));
+
+  try {
+    ['detect_align','face_replace','enhance','relight'].forEach(s => markStep(s, 'active'));
+    const resp = await fetch(`${API}/pipeline/run`, { method: 'POST', body: fd });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({detail: resp.statusText}));
+      throw new Error(err.detail || 'Pipeline failed');
+    }
+    const data = await resp.json();
+    ['detect_align','face_replace','enhance','relight'].forEach(s => markStep(s, 'done'));
+
+    logEl.innerHTML = data.log.map(l =>
+      l.includes('unavailable') || l.includes('failed') ? `<span class="warn">${l}</span>` : l
+    ).join('\n') || '(no notes)';
+
+    if (!data.target_face_detected) {
+      statusEl.textContent = 'No face found in the target image — enhance/relight still ran on the plate as-is.';
+      statusEl.className = 'status-line error';
+    } else if (driverFile && !data.driver_face_detected) {
+      statusEl.textContent = 'Target face found, but no face detected in the driver image — swap was skipped.';
+      statusEl.className = 'status-line error';
+    } else {
+      statusEl.textContent = `Done — ${data.passes.length} passes generated.`;
+      statusEl.className = 'status-line ok';
+    }
+
+    // before/after
+    const beforeUrl = URL.createObjectURL(targetFile);
+    const afterUrl = await fetchPassBlobUrl(data.job_id, 'relit');
+    document.getElementById('compare-before').src = beforeUrl;
+    document.getElementById('compare-after').src = afterUrl;
+    compare.classList.add('ready');
+    setComparePct(50);
+    document.getElementById('compare-tag').textContent = 'drag to compare';
+
+    // full gallery
+    for (const name of data.passes) {
+      const url = await fetchPassBlobUrl(data.job_id, name);
+      const card = document.createElement('div');
+      card.className = 'pass-card';
+      card.innerHTML = `<img src="${url}" /><div class="pname">${name}</div>`;
+      card.addEventListener('click', () => {
+        document.getElementById('compare-after').src = url;
+        document.getElementById('compare-tag').textContent = name;
+      });
+      galleryGrid.appendChild(card);
+    }
+    gallery.style.display = 'block';
+
+  } catch (err) {
+    statusEl.textContent = 'Something went wrong: ' + err.message;
+    statusEl.className = 'status-line error';
+    resetSteps();
+  } finally {
+    runBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

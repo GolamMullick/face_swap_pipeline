@@ -1,0 +1,10 @@
+# Requirements for streamlit_app.py only.
+#
+# Kept separate from requirements.txt (the FastAPI service) on purpose:
+# Streamlit pulls in its own version of some shared packages (e.g.
+# starlette), and pinning them together can create version conflicts
+# between the two UIs. Install this in its own virtual environment.
+
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+streamlit==1.38.0
